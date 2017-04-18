@@ -18,6 +18,8 @@
 
 #import "RLMArray_Private.hpp"
 
+#if 0
+#import "RLMAccessor.hpp"
 #import "RLMObjectSchema_Private.hpp"
 #import "RLMObjectStore.h"
 #import "RLMObject_Private.hpp"
@@ -30,6 +32,7 @@
 #import "RLMUtil.hpp"
 
 #import "results.hpp"
+#import "primitive_list.hpp"
 
 #import <realm/table_view.hpp>
 #import <objc/runtime.h>
@@ -60,6 +63,7 @@ static auto translateErrors(Function&& f) {
 
 @implementation RLMArraySubTable {
 @public
+    realm::PrimitiveList _list;
     realm::TableRef _table;
     RLMRealm *_realm;
     RLMClassInfo *_ownerInfo;
@@ -92,7 +96,7 @@ template<typename IndexSetFactory>
 static void changeArray(__unsafe_unretained RLMArraySubTable *const ar,
                         NSKeyValueChange kind, dispatch_block_t f, IndexSetFactory&& is) {
     RLMObservationInfo *info = RLMGetObservationInfo(ar->_observationInfo.get(),
-                                                     ar->_table->get_parent_row_index(),
+                                                     ar->_list.get_origin_row_index(),
                                                      *ar->_ownerInfo);
     if (info) {
         NSIndexSet *indexes = is();
@@ -131,11 +135,11 @@ static void changeArray(__unsafe_unretained RLMArraySubTable *const ar,
 }
 
 - (NSUInteger)count {
-    return _table->size();
+    return _list.size();
 }
 
 - (BOOL)isInvalidated {
-    return !_table->is_attached();
+    return !_list.is_valid();
 }
 
 - (BOOL)isEqual:(id)object {
@@ -150,55 +154,27 @@ static void changeArray(__unsafe_unretained RLMArraySubTable *const ar,
     return std::hash<void *>()(_table.get());
 }
 
-static void set(realm::Table& table, size_t ndx, id value) {
-    // FIXME: validate etc.
-    // FIXME: nulls
-    switch (table.get_column_type(0)) {
-        case realm::type_Int: table.set_int(0, ndx, [value longLongValue]); break;
-        case realm::type_Bool: table.set_bool(0, ndx, [value boolValue]); break;
-        case realm::type_Float: table.set_float(0, ndx, [value floatValue]); break;
-        case realm::type_Double: table.set_double(0, ndx, [value doubleValue]); break;
-        case realm::type_String: table.set_string(0, ndx, RLMStringDataWithNSString(value)); break;
-        case realm::type_Binary: table.set_binary(0, ndx, RLMBinaryDataForNSData(value)); break;
-        case realm::type_Timestamp: table.set_timestamp(0, ndx, RLMTimestampForNSDate(value)); break;
-        default: REALM_UNREACHABLE();
-    }
-}
-
-static id get(realm::Table& table, size_t ndx) {
-    // FIXME: nulls
-    switch (table.get_column_type(0)) {
-        case realm::type_Int:       return @(table.get_int(0, ndx));
-        case realm::type_Bool:      return @(table.get_bool(0, ndx));
-        case realm::type_Float:     return @(table.get_float(0, ndx));
-        case realm::type_Double:    return @(table.get_double(0, ndx));
-        case realm::type_String:    return RLMStringDataToNSString(table.get_string(0, ndx));
-        case realm::type_Binary:    return RLMBinaryDataToNSData(table.get_binary(0, ndx));
-        case realm::type_Timestamp: return RLMTimestampToNSDate(table.get_timestamp(0, ndx));
-        default: REALM_UNREACHABLE();
-    }
-}
-
 - (NSUInteger)countByEnumeratingWithState:(__unused NSFastEnumerationState *)state
                                     count:(__unused NSUInteger)len {
     return 0;
 }
 
 - (id)objectAtIndex:(NSUInteger)index {
-    return get(*_table, index);
+    RLMAccessorContext context(_realm, *_ownerInfo);
+    return _list.get(context, index);
 }
 
 static void insertValue(RLMArraySubTable *ar, id value, NSUInteger index) {
     if (index == NSUIntegerMax) {
-        index = ar->_table->size();
+        index = ar->_list.size();
     }
-    else if (index > ar->_table->size()) {
+    else if (index > ar->_list.size()) {
         @throw RLMException(@"bad");
     }
 
     changeArray(ar, NSKeyValueChangeInsertion, index, ^{
-        ar->_table->insert_empty_row(index);
-        set(*ar->_table, index, value);
+        RLMAccessorContext context(ar->_realm, *ar->_ownerInfo);
+        ar->_list.insert(context, index, value);
     });
 }
 
@@ -212,10 +188,10 @@ static void insertValue(RLMArraySubTable *ar, id value, NSUInteger index) {
 
 - (void)insertObjects:(id<NSFastEnumeration>)objects atIndexes:(NSIndexSet *)indexes {
     changeArray(self, NSKeyValueChangeInsertion, indexes, ^{
+        RLMAccessorContext context(_realm, *_ownerInfo);
         NSUInteger index = [indexes firstIndex];
         for (id obj in objects) {
-            _table->insert_empty_row(index);
-            set(*_table, index, obj);
+            _list.set(context, index, obj);
             index = [indexes indexGreaterThanIndex:index];
         }
     });
@@ -224,42 +200,43 @@ static void insertValue(RLMArraySubTable *ar, id value, NSUInteger index) {
 
 - (void)removeObjectAtIndex:(NSUInteger)index {
     changeArray(self, NSKeyValueChangeRemoval, index, ^{
-        _table->remove(index);
+        _list.remove(index);
     });
 }
 
 - (void)removeObjectsAtIndexes:(NSIndexSet *)indexes {
     changeArray(self, NSKeyValueChangeRemoval, indexes, ^{
         [indexes enumerateIndexesWithOptions:NSEnumerationReverse usingBlock:^(NSUInteger idx, BOOL *) {
-            _table->remove(idx);
+            _list.remove(idx);
         }];
     });
 }
 
 - (void)addObjectsFromArray:(NSArray *)array {
     changeArray(self, NSKeyValueChangeInsertion, NSMakeRange(self.count, array.count), ^{
-        size_t row = _table->add_empty_row(array.count);
+        RLMAccessorContext context(_realm, *_ownerInfo);
         for (id obj in array) {
-            set(*_table, row++, obj);
+            _list.add(context, obj);
         }
     });
 }
 
 - (void)removeAllObjects {
     changeArray(self, NSKeyValueChangeRemoval, NSMakeRange(0, self.count), ^{
-        _table->clear();
+        _list.remove_all();
     });
 }
 
 - (void)replaceObjectAtIndex:(NSUInteger)index withObject:(id)object {
     changeArray(self, NSKeyValueChangeReplacement, index, ^{
-        set(*_table, index, object);
+        RLMAccessorContext context(_realm, *_ownerInfo);
+        _list.set(context, index, object);
     });
 }
 
 - (void)exchangeObjectAtIndex:(NSUInteger)index1 withObjectAtIndex:(NSUInteger)index2 {
     changeArray(self, NSKeyValueChangeReplacement, ^{
-        _table->swap_rows(index1, index2);
+        _list.swap(index1, index2);
     }, [=] {
         NSMutableIndexSet *set = [[NSMutableIndexSet alloc] initWithIndex:index1];
         [set addIndex:index2];
@@ -268,17 +245,8 @@ static void insertValue(RLMArraySubTable *ar, id value, NSUInteger index) {
 }
 
 - (NSUInteger)indexOfObject:(id)object {
-    // FIXME: validate etc.
-    switch (_table->get_column_type(0)) {
-        case realm::type_Int: return RLMConvertNotFound(_table->find_first_int(0, [object longLongValue]));
-        case realm::type_Bool: return RLMConvertNotFound(_table->find_first_bool(0, [object boolValue]));
-        case realm::type_Float: return RLMConvertNotFound(_table->find_first_float(0, [object floatValue]));
-        case realm::type_Double: return RLMConvertNotFound(_table->find_first_double(0, [object doubleValue]));
-        case realm::type_String: return RLMConvertNotFound(_table->find_first_string(0, RLMStringDataWithNSString(object)));
-        case realm::type_Binary: return RLMConvertNotFound(_table->find_first_binary(0, RLMBinaryDataForNSData(object)));
-        case realm::type_Timestamp: return RLMConvertNotFound(_table->find_first_timestamp(0, RLMTimestampForNSDate(object)));
-        default: return NSNotFound;
-    }
+    RLMAccessorContext context(_realm, *_ownerInfo);
+    return _list.find(context, object);
 }
 
 - (id)valueForKeyPath:(NSString *)keyPath {
@@ -296,8 +264,9 @@ static void insertValue(RLMArraySubTable *ar, id value, NSUInteger index) {
         return; // unreachable barring shenanigans
     }
 
-    for (size_t i = 0, count = _table->size(); i < count; ++i) {
-        set(*_table, i, value);
+    RLMAccessorContext context(_realm, *_ownerInfo);
+    for (size_t i = 0, count = _list.size(); i < count; ++i) {
+        _list.set(context, i, value);
     }
 }
 
@@ -360,3 +329,5 @@ static void insertValue(RLMArraySubTable *ar, id value, NSUInteger index) {
 #pragma clang diagnostic pop
 
 @end
+
+#endif

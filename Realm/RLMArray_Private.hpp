@@ -59,14 +59,6 @@ class RLMObservationInfo;
 - (void)deleteObjectsFromRealm;
 @end
 
-@interface RLMArraySubTable : RLMArray <RLMFastEnumerable>
-- (instancetype)initWithParent:(RLMObjectBase *)parentObject property:(RLMProperty *)property;
-- (RLMArraySubTable *)initWithTable:(realm::TableRef)table
-                             realm:(__unsafe_unretained RLMRealm *const)realm
-                        parentInfo:(RLMClassInfo *)parentInfo
-                          property:(__unsafe_unretained RLMProperty *const)property;
-@end
-
 void RLMValidateArrayObservationKey(NSString *keyPath, RLMArray *array);
 
 // Initialize the observation info for an array if needed

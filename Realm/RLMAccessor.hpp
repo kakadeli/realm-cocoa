@@ -38,15 +38,28 @@ struct OptionalId {
 class RLMAccessorContext {
 public:
     RLMAccessorContext(RLMObjectBase *parentObject);
-    RLMAccessorContext(RLMRealm *realm, RLMClassInfo& info, bool is_create);
+    RLMAccessorContext(RLMRealm *realm, RLMClassInfo& info, bool is_create=false);
 
     id defaultValue(NSString *key);
     id value(id obj, size_t propIndex);
 
-    id wrap(realm::TableRef);
-    id wrap(realm::List);
-    id wrap(realm::Results);
-    id wrap(realm::Object);
+    id box(realm::List);
+    id box(realm::Results);
+    id box(realm::Object);
+    id box(RowExpr);
+    
+    id box(BinaryData v) { return RLMBinaryDataToNSData(v); }
+    id box(bool v) { return @(v); }
+    id box(double v) { return @(v); }
+    id box(float v) { return @(v); }
+    id box(long long v) { return @(v); }
+    id box(StringData v) { return @(v.data()); }
+    id box(Timestamp v) { return RLMTimestampToNSDate(v); }
+
+    id box(realm::util::Optional<bool> v) { return v ? @(*v) : nil; }
+    id box(realm::util::Optional<double> v) { return v ? @(*v) : nil; }
+    id box(realm::util::Optional<float> v) { return v ? @(*v) : nil; }
+    id box(realm::util::Optional<int64_t> v) { return v ? @(*v) : nil; }
 
     size_t addObject(id value, std::string const& object_type, bool is_update);
 
@@ -69,6 +82,9 @@ public:
         }
     }
 
+    template<typename T>
+    T unbox(id v);
+
     Timestamp to_timestamp(id v) { return RLMTimestampForNSDate(v); }
     bool to_bool(id v) { return [v boolValue]; }
     double to_double(id v) { return [v doubleValue]; }
@@ -78,17 +94,16 @@ public:
     StringData to_string(id v) { return RLMStringDataWithNSString(v); }
     Mixed to_mixed(id) { throw std::logic_error("'Any' type is unsupported"); }
 
-    id from_binary(BinaryData v) { return RLMBinaryDataToNSData(v); }
-    id from_bool(bool v) { return @(v); }
-    id from_double(double v) { return @(v); }
-    id from_float(float v) { return @(v); }
-    id from_long(long long v) { return @(v); }
-    id from_string(StringData v) { return @(v.data()); }
-    id from_timestamp(Timestamp v) { return RLMTimestampToNSDate(v); }
-    id from_list(List v) { return wrap(std::move(v)); }
-    id from_table(TableRef v) { return wrap(std::move(v)); }
-    id from_results(Results v) { return wrap(std::move(v)); }
-    id from_object(Object v) { return wrap(v); }
+    id from_binary(BinaryData v) { return box(v); }
+    id from_bool(bool v) { return box(v); }
+    id from_double(double v) { return box(v); }
+    id from_float(float v) { return box(v); }
+    id from_long(long long v) { return box(v); }
+    id from_string(StringData v) { return box(v); }
+    id from_timestamp(Timestamp v) { return box(v); }
+    id from_list(List v) { return box(std::move(v)); }
+    id from_results(Results v) { return box(std::move(v)); }
+    id from_object(Object v) { return box(v); }
 
     bool is_null(id v) { return v == NSNull.null; }
     id null_value() { return NSNull.null; }
@@ -114,3 +129,26 @@ private:
 
     id doGetValue(id obj, size_t propIndex, __unsafe_unretained RLMProperty *const prop);
 };
+
+template<>
+inline Timestamp RLMAccessorContext::unbox(id v) { return RLMTimestampForNSDate(v); }
+template<>
+inline bool RLMAccessorContext::unbox(id v) { return [v boolValue]; }
+template<>
+inline double RLMAccessorContext::unbox(id v) { return [v doubleValue]; }
+template<>
+inline float RLMAccessorContext::unbox(id v) { return [v floatValue]; }
+template<>
+inline long long RLMAccessorContext::unbox(id v) { return [v longLongValue]; }
+template<>
+inline BinaryData RLMAccessorContext::unbox(id v) { return RLMBinaryDataForNSData(v); }
+template<>
+inline StringData RLMAccessorContext::unbox(id v) { return RLMStringDataWithNSString(v); }
+template<>
+inline realm::util::Optional<bool> RLMAccessorContext::unbox(id v) { return v ? realm::util::Optional<bool>([v boolValue]) : util::none; }
+template<>
+inline realm::util::Optional<double> RLMAccessorContext::unbox(id v) { return v ? realm::util::make_optional([v doubleValue]) : util::none; }
+template<>
+inline realm::util::Optional<float> RLMAccessorContext::unbox(id v) { return v ? realm::util::make_optional([v floatValue]) : util::none; }
+template<>
+inline realm::util::Optional<int64_t> RLMAccessorContext::unbox(id v) { return v ? realm::util::make_optional([v longLongValue]) : util::none; }

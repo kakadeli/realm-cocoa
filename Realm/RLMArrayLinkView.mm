@@ -18,6 +18,7 @@
 
 #import "RLMArray_Private.hpp"
 
+#import "RLMAccessor.hpp"
 #import "RLMObjectSchema_Private.hpp"
 #import "RLMObjectStore.h"
 #import "RLMObject_Private.hpp"
@@ -31,6 +32,7 @@
 
 #import "list.hpp"
 #import "results.hpp"
+#import "shared_realm.hpp"
 
 #import <realm/table_view.hpp>
 #import <objc/runtime.h>
@@ -62,12 +64,17 @@
                              realm:(__unsafe_unretained RLMRealm *const)realm
                         parentInfo:(RLMClassInfo *)parentInfo
                           property:(__unsafe_unretained RLMProperty *const)property {
-    self = [self initWithObjectClassName:property.objectClassName];
+    if (property.type == RLMPropertyTypeObject)
+        self = [self initWithObjectClassName:property.objectClassName];
+    else
+        self = [self initWithObjectType:property.type optional:property.optional];
     if (self) {
         _realm = realm;
         REALM_ASSERT(list.get_realm() == realm->_realm);
         _backingList = std::move(list);
-        _objectInfo = &parentInfo->linkTargetType(property.index);
+        // FIXME: subtables
+        if (property.type == RLMPropertyTypeObject)
+            _objectInfo = &parentInfo->linkTargetType(property.index);
         _ownerInfo = parentInfo;
         _key = property.name;
     }
@@ -77,8 +84,14 @@
 - (RLMArrayLinkView *)initWithParent:(__unsafe_unretained RLMObjectBase *const)parentObject
                             property:(__unsafe_unretained RLMProperty *const)property {
     __unsafe_unretained RLMRealm *const realm = parentObject->_realm;
-    realm::List list(realm->_realm, parentObject->_row.get_linklist(parentObject->_info->tableColumn(property)));
-    return [self initWithList:std::move(list)
+    auto col = parentObject->_info->tableColumn(property);
+    if (property.type == RLMPropertyTypeObject) {
+        return [self initWithList:realm::List(realm->_realm, parentObject->_row.get_linklist(col))
+                            realm:realm
+                       parentInfo:parentObject->_info
+                         property:property];
+    }
+    return [self initWithList:realm::List(realm->_realm, parentObject->_row.get_subtable(col))
                         realm:realm
                    parentInfo:parentObject->_info
                      property:property];
@@ -97,6 +110,7 @@ void RLMEnsureArrayObservationInfo(std::unique_ptr<RLMObservationInfo>& info,
                                    __unsafe_unretained RLMArray *const array,
                                    __unsafe_unretained id const observed) {
     RLMValidateArrayObservationKey(keyPath, array);
+    // FIXME
     if (!info && array.class == [RLMArrayLinkView class]) {
         RLMArrayLinkView *lv = static_cast<RLMArrayLinkView *>(array);
         info = std::make_unique<RLMObservationInfo>(*lv->_ownerInfo,
@@ -146,7 +160,8 @@ static auto translateErrors(Function&& f, NSString *aggregateMethod=nil) {
 }
 
 static void validateObjectToAdd(__unsafe_unretained RLMArrayLinkView *const ar,
-                                __unsafe_unretained RLMObject *const obj) {
+                                __unsafe_unretained id const value) {
+    RLMObject *obj = value; // FIXME
     if (!obj) {
         @throw RLMException(@"Cannot add `nil` to RLMArray<%@>", ar->_objectClassName);
     }
@@ -238,6 +253,7 @@ static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyVal
     if (state->state == 0) {
         translateErrors([&] { _backingList.verify_attached(); });
 
+        // FIXME: RLMFastEnumerator doesn't support primitives yet
         enumerator = [[RLMFastEnumerator alloc] initWithCollection:self objectSchema:*_objectInfo];
         state->extra[0] = (long)enumerator;
         state->extra[1] = self.count;
@@ -250,35 +266,39 @@ static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyVal
 }
 
 - (id)objectAtIndex:(NSUInteger)index {
-    return RLMCreateObjectAccessor(_realm, *_objectInfo,
-                                   translateErrors([&] { return _backingList.get(index).get_index(); }));
+    return translateErrors([&] {
+        RLMAccessorContext context(_realm, *_objectInfo);
+        return _backingList.get(context, index);
+    });
 }
 
-static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger index) {
+static void RLMInsertObject(RLMArrayLinkView *ar, id object, NSUInteger index) {
     if (index == NSUIntegerMax) {
         index = translateErrors([&] { return ar->_backingList.size(); });
     }
 
-    validateObjectToAdd(ar, object);
+    validateObjectToAdd(ar, object); // FIXME
     changeArray(ar, NSKeyValueChangeInsertion, index, ^{
-        ar->_backingList.insert(index, object->_row.get_index());
+        RLMAccessorContext context(ar->_realm, *ar->_objectInfo);
+        ar->_backingList.insert(context, index, object);
     });
 }
 
-- (void)addObject:(RLMObject *)object {
+- (void)addObject:(id)object {
     RLMInsertObject(self, object, NSUIntegerMax);
 }
 
-- (void)insertObject:(RLMObject *)object atIndex:(NSUInteger)index {
+- (void)insertObject:(id)object atIndex:(NSUInteger)index {
     RLMInsertObject(self, object, index);
 }
 
 - (void)insertObjects:(id<NSFastEnumeration>)objects atIndexes:(NSIndexSet *)indexes {
     changeArray(self, NSKeyValueChangeInsertion, indexes, ^{
         NSUInteger index = [indexes firstIndex];
-        for (RLMObject *obj in objects) {
-            validateObjectToAdd(self, obj);
-            _backingList.insert(index, obj->_row.get_index());
+        RLMAccessorContext context(_realm, *_objectInfo);
+        for (id obj in objects) {
+            validateObjectToAdd(self, obj); // FIXME
+            _backingList.insert(context, index, obj);
             index = [indexes indexGreaterThanIndex:index];
         }
     });
@@ -301,9 +321,10 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
 
 - (void)addObjectsFromArray:(NSArray *)array {
     changeArray(self, NSKeyValueChangeInsertion, NSMakeRange(self.count, array.count), ^{
-        for (RLMObject *obj in array) {
+        RLMAccessorContext context(_realm, *_objectInfo);
+        for (id obj in array) {
             validateObjectToAdd(self, obj);
-            _backingList.add(obj->_row.get_index());
+            _backingList.add(context, obj);
         }
     });
 }
@@ -314,10 +335,11 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
     });
 }
 
-- (void)replaceObjectAtIndex:(NSUInteger)index withObject:(RLMObject *)object {
+- (void)replaceObjectAtIndex:(NSUInteger)index withObject:(id)object {
     validateObjectToAdd(self, object);
     changeArray(self, NSKeyValueChangeReplacement, index, ^{
-        _backingList.set(index, object->_row.get_index());
+        RLMAccessorContext context(_realm, *_objectInfo);
+        _backingList.set(context, index, object);
     });
 }
 
@@ -339,18 +361,24 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
     });
 }
 
-- (NSUInteger)indexOfObject:(RLMObject *)object {
-    if (object.invalidated) {
-        @throw RLMException(@"Object has been deleted or invalidated");
+- (NSUInteger)indexOfObject:(id)object {
+    if (!object) {
+        return NSNotFound;
     }
+//    if (object.invalidated) {
+//        @throw RLMException(@"Object has been deleted or invalidated");
+//    }
+//
+//    // check that object types align
+//    if (![_objectClassName isEqualToString:object->_objectSchema.className]) {
+//        @throw RLMException(@"Object of type (%@) does not match RLMArray type (%@)",
+//                            object->_objectSchema.className, _objectClassName);
+//    }
 
-    // check that object types align
-    if (![_objectClassName isEqualToString:object->_objectSchema.className]) {
-        @throw RLMException(@"Object of type (%@) does not match RLMArray type (%@)",
-                            object->_objectSchema.className, _objectClassName);
-    }
-
-    return translateErrors([&] { return RLMConvertNotFound(_backingList.find(object->_row)); });
+    return translateErrors([&] {
+        RLMAccessorContext context(_realm, *_objectInfo);
+        return RLMConvertNotFound(_backingList.find(context, object));
+    });
 }
 
 - (id)valueForKeyPath:(NSString *)keyPath {
@@ -380,6 +408,14 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
 }
 
 - (void)setValue:(id)value forKey:(NSString *)key {
+    if ([key isEqualToString:@"self"]) {
+        RLMAccessorContext context(_realm, *_objectInfo);
+        for (size_t i = 0, count = _backingList.size(); i < count; ++i) {
+            _backingList.set(context, i, value);
+        }
+        return;
+    }
+
     translateErrors([&] { _backingList.verify_in_transaction(); });
     RLMCollectionSetValueForKey(self, key, value);
 }
@@ -437,17 +473,14 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
 
 - (NSUInteger)indexOfObjectWithPredicate:(NSPredicate *)predicate {
     auto query = translateErrors([&] { return _backingList.get_query(); });
-    query.and_query(RLMPredicateToQuery(predicate, _objectInfo->rlmObjectSchema, _realm.schema, _realm.group));
-#if REALM_VER_MAJOR >= 2
+    query.and_query(RLMPredicateToQuery(predicate, _objectInfo->rlmObjectSchema,
+                                        _realm.schema, _realm.group));
     auto indexInTable = query.find();
     if (indexInTable == realm::not_found) {
         return NSNotFound;
     }
     auto row = query.get_table()->get(indexInTable);
     return _backingList.find(row);
-#else
-    return RLMConvertNotFound(query.find());
-#endif
 }
 
 - (NSArray *)objectsAtIndexes:(__unused NSIndexSet *)indexes {
@@ -487,7 +520,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
 #pragma mark - Thread Confined Protocol Conformance
 
 - (std::unique_ptr<realm::ThreadSafeReferenceBase>)makeThreadSafeReference {
-    realm::ThreadSafeReference<realm::List> list_reference = _realm->_realm->obtain_thread_safe_reference(_backingList);
+    auto list_reference = _realm->_realm->obtain_thread_safe_reference(_backingList);
     return std::make_unique<realm::ThreadSafeReference<realm::List>>(std::move(list_reference));
 }
 
@@ -504,7 +537,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
     REALM_ASSERT_DEBUG(dynamic_cast<realm::ThreadSafeReference<realm::List> *>(reference.get()));
     auto list_reference = static_cast<realm::ThreadSafeReference<realm::List> *>(reference.get());
 
-    realm::List list = realm->_realm->resolve_thread_safe_reference(std::move(*list_reference));
+    auto list = realm->_realm->resolve_thread_safe_reference(std::move(*list_reference));
     if (!list.is_valid()) {
         return nil;
     }

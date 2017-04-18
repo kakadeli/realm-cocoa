@@ -585,8 +585,8 @@ static realm::util::Optional<RLMPropertyType> typeFromProtocolString(const char 
     p.name = _name.UTF8String;
     p.type = static_cast<realm::PropertyType>(_type) | (_array ? realm::PropertyType::Array : realm::PropertyType::Int);
     p.object_type = _objectClassName ? _objectClassName.UTF8String : "";
-    p.is_indexed = _indexed;
-    p.is_nullable = _optional;
+    p.is_indexed = (bool)_indexed;
+    p.is_nullable = (bool)_optional;
     p.link_origin_property_name = _linkOriginPropertyName ? _linkOriginPropertyName.UTF8String : "";
     return p;
 }

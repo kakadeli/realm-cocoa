@@ -167,6 +167,9 @@
 		3F2E66651CA0BA12004761D5 /* NotificationTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 3F2E66611CA0B9D5004761D5 /* NotificationTests.m */; };
 		3F336E8A1DA2FA14006CB5A0 /* RLMSyncConfiguration_Private.h in Headers */ = {isa = PBXBuildFile; fileRef = 1A36236A1D83868F00945A54 /* RLMSyncConfiguration_Private.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		3F336E8B1DA2FA15006CB5A0 /* RLMSyncConfiguration_Private.h in Headers */ = {isa = PBXBuildFile; fileRef = 1A36236A1D83868F00945A54 /* RLMSyncConfiguration_Private.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		3F5734F11EA6BF3700C236B3 /* object_accessor_impl.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 3F5734EE1EA6BF3700C236B3 /* object_accessor_impl.hpp */; };
+		3F5734F21EA6BF3700C236B3 /* primitive_list_notifier.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 3F5734EF1EA6BF3700C236B3 /* primitive_list_notifier.hpp */; };
+		3F5734F31EA6BF3700C236B3 /* primitive_list_notifier.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3F5734F01EA6BF3700C236B3 /* primitive_list_notifier.cpp */; };
 		3F5B5D301E84230B00953B33 /* binding_callback_thread_observer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3F5B5D2E1E84230B00953B33 /* binding_callback_thread_observer.cpp */; };
 		3F5B5D321E84230E00953B33 /* binding_callback_thread_observer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3F5B5D2E1E84230B00953B33 /* binding_callback_thread_observer.cpp */; };
 		3F643BED1CEA655800F6D0C8 /* mixed-column.realm in Resources */ = {isa = PBXBuildFile; fileRef = 3F643BEB1CEA654D00F6D0C8 /* mixed-column.realm */; };
@@ -711,6 +714,9 @@
 		3F44109E19953F5900223146 /* RLMTestObjects.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RLMTestObjects.h; sourceTree = "<group>"; };
 		3F452EC519C2279800AFC154 /* RLMSwiftSupport.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = RLMSwiftSupport.m; path = Realm/RLMSwiftSupport.m; sourceTree = SOURCE_ROOT; };
 		3F4E324B1B98C6C700183A69 /* RLMSchema_Private.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = RLMSchema_Private.hpp; sourceTree = "<group>"; };
+		3F5734EE1EA6BF3700C236B3 /* object_accessor_impl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = object_accessor_impl.hpp; sourceTree = "<group>"; };
+		3F5734EF1EA6BF3700C236B3 /* primitive_list_notifier.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = primitive_list_notifier.hpp; sourceTree = "<group>"; };
+		3F5734F01EA6BF3700C236B3 /* primitive_list_notifier.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = primitive_list_notifier.cpp; sourceTree = "<group>"; };
 		3F5B5D2E1E84230B00953B33 /* binding_callback_thread_observer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = binding_callback_thread_observer.cpp; sourceTree = "<group>"; };
 		3F5B5D2F1E84230B00953B33 /* binding_callback_thread_observer.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = binding_callback_thread_observer.hpp; sourceTree = "<group>"; };
 		3F62BA9E1BA0AB9000A4CEB2 /* binding_context.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = binding_context.hpp; sourceTree = "<group>"; };
@@ -1159,8 +1165,11 @@
 				3F0543F61C56F78300AA5322 /* external_commit_helper.hpp */,
 				3F98019F1C8E4F55000A8B07 /* list_notifier.cpp */,
 				3F98019B1C8E4F55000A8B07 /* list_notifier.hpp */,
+				3F5734EE1EA6BF3700C236B3 /* object_accessor_impl.hpp */,
 				3FAB08861E1EC51F001BC8DA /* object_notifier.cpp */,
 				3FAB08851E1EC51F001BC8DA /* object_notifier.hpp */,
+				3F5734F01EA6BF3700C236B3 /* primitive_list_notifier.cpp */,
+				3F5734EF1EA6BF3700C236B3 /* primitive_list_notifier.hpp */,
 				3F0543EA1C56F71500AA5322 /* realm_coordinator.cpp */,
 				3F0543E91C56F71500AA5322 /* realm_coordinator.hpp */,
 				3F9801AE1C90FD2D000A8B07 /* results_notifier.cpp */,
@@ -1549,6 +1558,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				3F73BC951E3A878500FE80B6 /* NSError+RLMSync.h in Headers */,
+				3F5734F11EA6BF3700C236B3 /* object_accessor_impl.hpp in Headers */,
+				3F5734F21EA6BF3700C236B3 /* primitive_list_notifier.hpp in Headers */,
 				5D659EA51BE04556006515A0 /* Realm.h in Headers */,
 				5D659EA71BE04556006515A0 /* RLMAccessor.h in Headers */,
 				5D659EA91BE04556006515A0 /* RLMArray.h in Headers */,
@@ -2176,6 +2187,7 @@
 				3FAB08881E1EC51F001BC8DA /* object_notifier.cpp in Sources */,
 				5D659E831BE04556006515A0 /* object_schema.cpp in Sources */,
 				5D659E841BE04556006515A0 /* object_store.cpp in Sources */,
+				3F5734F31EA6BF3700C236B3 /* primitive_list_notifier.cpp in Sources */,
 				3F0543EC1C56F71500AA5322 /* realm_coordinator.cpp in Sources */,
 				3F75566B1BE94CCC0058BC7E /* results.cpp in Sources */,
 				3F9801B01C90FD2D000A8B07 /* results_notifier.cpp in Sources */,
