@@ -27,6 +27,7 @@
 #import "RLMSyncPermissionValue_Private.hpp"
 #import "RLMSyncSession_Private.hpp"
 #import "RLMSyncSessionRefreshHandle.hpp"
+#import "RLMSyncUtil_Private.hpp"
 #import "RLMTokenModels.h"
 #import "RLMUtil.hpp"
 
@@ -45,11 +46,9 @@ NSError *translateExceptionPtrToError(std::exception_ptr ptr, bool get) {
     try {
         std::rethrow_exception(ptr);
     } catch (PermissionChangeException const& ex) {
-        // TODO: don't hardcode the user info keys
-        error = [NSError errorWithDomain:RLMSyncErrorDomain
-                                    code:(get ? RLMSyncErrorPermissionGetError : RLMSyncErrorPermissionChangeError)
-                                userInfo:@{@"description": @(ex.what()),
-                                           @"code": @(ex.code)}];
+        error = (get
+                 ? make_permission_error_get(@(ex.what()), ex.code)
+                 : make_permission_error_change(@(ex.what()), ex.code));
     }
     catch (const std::exception &exp) {
         RLMSetErrorOrThrow(RLMMakeError(RLMErrorFail, exp), &error);
@@ -251,11 +250,7 @@ PermissionChangeCallback RLMWrapPermissionStatusCallback(RLMPermissionStatusBloc
 
 - (void)retrievePermissionsWithCallback:(RLMPermissionResultsBlock)callback {
     if (!_user || _user->state() == SyncUser::State::Error) {
-        // TODO: improve the error
-        callback(nullptr, [NSError errorWithDomain:RLMSyncErrorDomain
-                                              code:RLMSyncErrorPermissionChangeError
-                                          userInfo:@{@"description":
-                                                         @"Permissions cannot be retrieved using an invalid user."}]);
+        callback(nullptr, make_permission_error_get(@"Permissions cannot be retrieved using an invalid user."));
         return;
     }
     Permissions::get_permissions(_user, RLMWrapPermissionResultsCallback(callback), *_configMaker);
@@ -263,11 +258,7 @@ PermissionChangeCallback RLMWrapPermissionStatusCallback(RLMPermissionStatusBloc
 
 - (void)applyPermission:(RLMSyncPermissionValue *)permission callback:(RLMPermissionStatusBlock)callback {
     if (!_user || _user->state() == SyncUser::State::Error) {
-        // TODO: improve the error
-        callback([NSError errorWithDomain:RLMSyncErrorDomain
-                                     code:RLMSyncErrorPermissionChangeError
-                                 userInfo:@{@"description":
-                                                @"Permissions cannot be applied using an invalid user."}]);
+        callback(make_permission_error_change(@"Permissions cannot be applied using an invalid user."));
         return;
     }
     Permissions::set_permission(_user,
@@ -278,11 +269,7 @@ PermissionChangeCallback RLMWrapPermissionStatusCallback(RLMPermissionStatusBloc
 
 - (void)revokePermission:(RLMSyncPermissionValue *)permission callback:(RLMPermissionStatusBlock)callback {
     if (!_user || _user->state() == SyncUser::State::Error) {
-        // TODO: improve the error
-        callback([NSError errorWithDomain:RLMSyncErrorDomain
-                                     code:RLMSyncErrorPermissionChangeError
-                                 userInfo:@{@"description":
-                                                @"Permissions cannot be revoked using an invalid user."}]);
+        callback(make_permission_error_change(@"Permissions cannot be revoked using an invalid user."));
         return;
     }
     Permissions::delete_permission(_user,
@@ -353,10 +340,7 @@ PermissionChangeCallback RLMWrapPermissionStatusCallback(RLMPermissionStatusBloc
                                                                        requireRefreshToken:YES];
             if (!model) {
                 // Malformed JSON
-                error = [NSError errorWithDomain:RLMSyncErrorDomain
-                                            code:RLMSyncErrorBadResponse
-                                        userInfo:@{kRLMSyncErrorJSONKey: json}];
-                completion(nil, error);
+                completion(nil, make_auth_error_bad_response(json));
                 return;
             } else {
                 std::string server_url = authServerURL.absoluteString.UTF8String;
@@ -364,9 +348,7 @@ PermissionChangeCallback RLMWrapPermissionStatusCallback(RLMPermissionStatusBloc
                                                                 [model.refreshToken.token UTF8String],
                                                                 std::move(server_url));
                 if (!sync_user) {
-                    completion(nil, [NSError errorWithDomain:RLMSyncErrorDomain
-                                                        code:RLMSyncErrorClientSessionError
-                                                    userInfo:nil]);
+                    completion(nil, make_auth_error_client_issue());
                     return;
                 }
                 sync_user->set_is_admin(model.refreshToken.tokenData.isAdmin);
@@ -395,9 +377,7 @@ PermissionChangeCallback RLMWrapPermissionStatusCallback(RLMPermissionStatusBloc
                                                     none,
                                                     SyncUser::TokenType::Admin);
     if (!sync_user) {
-        completion(nil, [NSError errorWithDomain:RLMSyncErrorDomain
-                                            code:RLMSyncErrorClientSessionError
-                                        userInfo:nil]);
+        completion(nil, make_auth_error_client_issue());
         return;
     }
     user->_user = sync_user;
