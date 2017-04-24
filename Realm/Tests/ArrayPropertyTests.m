@@ -209,6 +209,8 @@
 
     RLMAssertThrowsWithReasonMatching([company.employees addObject:person], @"invalidated");
     RLMAssertThrowsWithReasonMatching([company.employees insertObject:person atIndex:0], @"invalidated");
+
+    [realm cancelWriteTransaction];
 }
 
 - (void)testAddNil {
@@ -217,6 +219,7 @@
     CompanyObject *company = [CompanyObject createInDefaultRealmWithValue:@[@"company", @[]]];
 
     RLMAssertThrowsWithReasonMatching([company.employees addObject:self.nonLiteralNil], @"nil");
+    [realm cancelWriteTransaction];
 }
 
 - (void)testUnmanaged {
@@ -308,7 +311,7 @@
     XCTAssertTrue([obj.stringObj isKindOfClass:[RLMArray class]]);
     XCTAssertTrue([obj.dataObj isKindOfClass:[RLMArray class]]);
     XCTAssertTrue([obj.dateObj isKindOfClass:[RLMArray class]]);
-    
+
     [obj.intObj addObject:@5];
     XCTAssertEqualObjects(obj.intObj.firstObject, @5);
 }
@@ -687,7 +690,7 @@
     XCTAssertEqualObjects([company.employees valueForKeyPath:@"@distinctUnionOfObjects.name"], (@[@"Joe"]));
 
     RLMAssertThrowsWithReasonMatching([company.employees valueForKeyPath:@"@sum.dogs.@sum.age"], @"Nested key paths.*not supported");
-    
+
     // unmanaged object
     company = [[CompanyObject alloc] init];
     ages = [NSMutableArray array];
@@ -1307,6 +1310,8 @@
     RLMAssertThrowsWithReasonMatching([array valueForKey:@"intCol"], @"invalidated");
     RLMAssertThrowsWithReasonMatching([array setValue:@1 forKey:@"intCol"], @"invalidated");
     RLMAssertThrowsWithReasonMatching({for (__unused id obj in array);}, @"invalidated");
+
+    [realm cancelWriteTransaction];
 }
 
 - (void)testMutatingMethodsCheckForWriteTransaction {

@@ -124,7 +124,7 @@ void RLMAddObjectToRealm(__unsafe_unretained RLMObjectBase *const object,
     }
 
     auto& info = realm->_info[object->_objectSchema.className];
-    RLMAccessorContext c{realm, info, false};
+    RLMAccessorContext c{realm, info, RLMCreateMode::Promote};
     object->_info = &info;
     object->_realm = realm;
     object->_objectSchema = info.rlmObjectSchema;
@@ -157,7 +157,7 @@ RLMObjectBase *RLMCreateObjectInRealmWithValue(RLMRealm *realm, NSString *classN
 
     // create the object
     auto& info = realm->_info[className];
-    RLMAccessorContext c{realm, info, true};
+    RLMAccessorContext c{realm, info, RLMCreateMode::Create};
     RLMObjectBase *object = RLMCreateManagedAccessor(info.rlmObjectSchema.accessorClass, realm, &info);
     try {
         object->_row = realm::Object::create(c, realm->_realm, *info.objectSchema,

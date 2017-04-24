@@ -1273,11 +1273,11 @@ static void addProperty(Class cls, const char *name, const char *type, size_t si
 
     // wrong PK type
     RLMAssertThrowsWithReasonMatching([PrimaryStringObject objectForPrimaryKey:@0],
-                                      @"Invalid value '0' of type '.*Number.*' for string");
+                                      @"Invalid value '0' of type '.*Number.*' for expected type 'string'");
     RLMAssertThrowsWithReasonMatching([PrimaryStringObject objectForPrimaryKey:@[]],
-                                      @"of type '.*Array.*' for string");
+                                      @"of type '.*Array.*' for expected type 'string'");
     RLMAssertThrowsWithReasonMatching([PrimaryIntObject objectForPrimaryKey:@""],
-                                      @"Invalid value '' of type '.*String.*' for int");
+                                      @"Invalid value '' of type '.*String.*' for expected type 'int'");
     RLMAssertThrowsWithReason([PrimaryIntObject objectForPrimaryKey:NSNull.null],
                               @"Invalid null value for non-nullable primary key.");
     RLMAssertThrowsWithReason([PrimaryIntObject objectForPrimaryKey:nil],

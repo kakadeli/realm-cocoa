@@ -147,6 +147,10 @@ static void throwError(NSString *aggregateMethod) {
                             RLMTypeToString((RLMPropertyType)e.column_type),
                             e.column_name.data());
     }
+    catch (std::logic_error const& e) {
+        // FIXME: more specific exceptions?
+        @throw RLMException(e);
+    }
 }
 
 template<typename Function>
@@ -161,10 +165,12 @@ static auto translateErrors(Function&& f, NSString *aggregateMethod=nil) {
 
 static void validateObjectToAdd(__unsafe_unretained RLMArrayLinkView *const ar,
                                 __unsafe_unretained id const value) {
-    RLMObject *obj = value; // FIXME
-    if (!obj) {
+    if (!value) {
         @throw RLMException(@"Cannot add `nil` to RLMArray<%@>", ar->_objectClassName);
     }
+
+    return;
+    RLMObject *obj = value; // FIXME
 
     NSString *objectClassName = obj->_objectSchema.className;
     if (![objectClassName isEqualToString:ar->_objectClassName]) {
@@ -279,7 +285,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, id object, NSUInteger index) {
 
     validateObjectToAdd(ar, object); // FIXME
     changeArray(ar, NSKeyValueChangeInsertion, index, ^{
-        RLMAccessorContext context(ar->_realm, *ar->_objectInfo);
+        RLMAccessorContext context(ar->_realm, *ar->_objectInfo, RLMCreateMode::Promote);
         ar->_backingList.insert(context, index, object);
     });
 }
@@ -295,7 +301,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, id object, NSUInteger index) {
 - (void)insertObjects:(id<NSFastEnumeration>)objects atIndexes:(NSIndexSet *)indexes {
     changeArray(self, NSKeyValueChangeInsertion, indexes, ^{
         NSUInteger index = [indexes firstIndex];
-        RLMAccessorContext context(_realm, *_objectInfo);
+        RLMAccessorContext context(_realm, *_objectInfo, RLMCreateMode::Promote);
         for (id obj in objects) {
             validateObjectToAdd(self, obj); // FIXME
             _backingList.insert(context, index, obj);
@@ -321,7 +327,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, id object, NSUInteger index) {
 
 - (void)addObjectsFromArray:(NSArray *)array {
     changeArray(self, NSKeyValueChangeInsertion, NSMakeRange(self.count, array.count), ^{
-        RLMAccessorContext context(_realm, *_objectInfo);
+        RLMAccessorContext context(_realm, *_objectInfo, RLMCreateMode::Promote);
         for (id obj in array) {
             validateObjectToAdd(self, obj);
             _backingList.add(context, obj);
@@ -338,7 +344,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, id object, NSUInteger index) {
 - (void)replaceObjectAtIndex:(NSUInteger)index withObject:(id)object {
     validateObjectToAdd(self, object);
     changeArray(self, NSKeyValueChangeReplacement, index, ^{
-        RLMAccessorContext context(_realm, *_objectInfo);
+        RLMAccessorContext context(_realm, *_objectInfo, RLMCreateMode::Promote);
         _backingList.set(context, index, object);
     });
 }
@@ -409,7 +415,7 @@ static void RLMInsertObject(RLMArrayLinkView *ar, id object, NSUInteger index) {
 
 - (void)setValue:(id)value forKey:(NSString *)key {
     if ([key isEqualToString:@"self"]) {
-        RLMAccessorContext context(_realm, *_objectInfo);
+        RLMAccessorContext context(_realm, *_objectInfo, RLMCreateMode::Promote);
         for (size_t i = 0, count = _backingList.size(); i < count; ++i) {
             _backingList.set(context, i, value);
         }

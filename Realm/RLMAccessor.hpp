@@ -35,10 +35,16 @@ struct OptionalId {
     id operator*() const noexcept { return value; }
 };
 
+enum class RLMCreateMode {
+    None,
+    Promote,
+    Create
+};
+
 class RLMAccessorContext {
 public:
     RLMAccessorContext(RLMObjectBase *parentObject);
-    RLMAccessorContext(RLMRealm *realm, RLMClassInfo& info, bool is_create=false);
+    RLMAccessorContext(RLMRealm *realm, RLMClassInfo& info, RLMCreateMode = RLMCreateMode::None);
 
     id defaultValue(NSString *key);
     id value(id obj, size_t propIndex);
@@ -85,28 +91,9 @@ public:
     template<typename T>
     T unbox(id v);
 
-    Timestamp to_timestamp(id v) { return RLMTimestampForNSDate(v); }
-    bool to_bool(id v) { return [v boolValue]; }
-    double to_double(id v) { return [v doubleValue]; }
-    float to_float(id v) { return [v floatValue]; }
-    long long to_long(id v) { return [v longLongValue]; }
-    BinaryData to_binary(id v) { return RLMBinaryDataForNSData(v); }
-    StringData to_string(id v) { return RLMStringDataWithNSString(v); }
-    Mixed to_mixed(id) { throw std::logic_error("'Any' type is unsupported"); }
-
-    id from_binary(BinaryData v) { return box(v); }
-    id from_bool(bool v) { return box(v); }
-    id from_double(double v) { return box(v); }
-    id from_float(float v) { return box(v); }
-    id from_long(long long v) { return box(v); }
-    id from_string(StringData v) { return box(v); }
-    id from_timestamp(Timestamp v) { return box(v); }
-    id from_list(List v) { return box(std::move(v)); }
-    id from_results(Results v) { return box(std::move(v)); }
-    id from_object(Object v) { return box(v); }
-
     bool is_null(id v) { return v == NSNull.null; }
     id null_value() { return NSNull.null; }
+    id no_value() { return nil; }
     bool allow_missing(id v) { return [v isKindOfClass:[NSArray class]]; }
 
     size_t to_existing_object_index(SharedRealm, id &);
@@ -120,7 +107,7 @@ public:
 private:
     RLMRealm *_realm;
     RLMClassInfo& _info;
-    bool _is_create;
+    RLMCreateMode _create_mode;
     RLMObjectBase *_parentObject;
     NSDictionary *_defaultValues;
 
@@ -129,26 +116,3 @@ private:
 
     id doGetValue(id obj, size_t propIndex, __unsafe_unretained RLMProperty *const prop);
 };
-
-template<>
-inline Timestamp RLMAccessorContext::unbox(id v) { return RLMTimestampForNSDate(v); }
-template<>
-inline bool RLMAccessorContext::unbox(id v) { return [v boolValue]; }
-template<>
-inline double RLMAccessorContext::unbox(id v) { return [v doubleValue]; }
-template<>
-inline float RLMAccessorContext::unbox(id v) { return [v floatValue]; }
-template<>
-inline long long RLMAccessorContext::unbox(id v) { return [v longLongValue]; }
-template<>
-inline BinaryData RLMAccessorContext::unbox(id v) { return RLMBinaryDataForNSData(v); }
-template<>
-inline StringData RLMAccessorContext::unbox(id v) { return RLMStringDataWithNSString(v); }
-template<>
-inline realm::util::Optional<bool> RLMAccessorContext::unbox(id v) { return v ? realm::util::Optional<bool>([v boolValue]) : util::none; }
-template<>
-inline realm::util::Optional<double> RLMAccessorContext::unbox(id v) { return v ? realm::util::make_optional([v doubleValue]) : util::none; }
-template<>
-inline realm::util::Optional<float> RLMAccessorContext::unbox(id v) { return v ? realm::util::make_optional([v floatValue]) : util::none; }
-template<>
-inline realm::util::Optional<int64_t> RLMAccessorContext::unbox(id v) { return v ? realm::util::make_optional([v longLongValue]) : util::none; }

@@ -667,13 +667,13 @@ id RLMDynamicGetByName(__unsafe_unretained RLMObjectBase *const obj,
     return RLMDynamicGet(obj, prop);
 }
 
-RLMAccessorContext::RLMAccessorContext(RLMRealm *realm, RLMClassInfo& info, bool is_create)
-: _realm(realm), _info(info), _is_create(is_create)
+RLMAccessorContext::RLMAccessorContext(RLMRealm *realm, RLMClassInfo& info, RLMCreateMode mode)
+: _realm(realm), _info(info), _create_mode(mode)
 {
 }
 
 RLMAccessorContext::RLMAccessorContext(RLMObjectBase *parent)
-: _realm(parent->_realm), _info(*parent->_info), _is_create(false), _parentObject(parent)
+: _realm(parent->_realm), _info(*parent->_info), _create_mode(RLMCreateMode::None), _parentObject(parent)
 {
 }
 
@@ -723,7 +723,7 @@ id RLMAccessorContext::value(id obj, size_t propIndex) {
         validateValueForProperty(value, prop, _info);
     }
 
-    if (!_is_create && [obj isKindOfClass:_info.rlmObjectSchema.objectClass] && !prop.swiftIvar) {
+    if (_create_mode == RLMCreateMode::Promote && [obj isKindOfClass:_info.rlmObjectSchema.objectClass] && !prop.swiftIvar) {
         // set the ivars for object and array properties to nil as otherwise the
         // accessors retain objects that are no longer accessible via the properties
         // this is mainly an issue when the object graph being added has cycles,
@@ -772,7 +772,7 @@ size_t RLMAccessorContext::addObject(id value, std::string const& object_type, b
         }
     }
 
-    if (_is_create) {
+    if (_create_mode == RLMCreateMode::Create) {
         return RLMCreateObjectInRealmWithValue(_realm, @(object_type.c_str()), value, is_update)->_row.get_index();
     }
 
@@ -801,10 +801,120 @@ id RLMAccessorContext::box(realm::Results r) {
                                      results:std::move(r)];
 }
 
+static RowExpr to_expr(Row& r) {
+    return r.get_table()->get(r.get_index());
+}
+
+static void checkType(bool cond, __unsafe_unretained id v, NSString *expected) {
+    if (__builtin_expect(!cond, 0)) {
+        @throw RLMException(@"Invalid value '%@' of type '%@' for expected type '%@'", v, [v class], expected);
+    }
+}
+
+template<>
+Timestamp RLMAccessorContext::unbox(id v) {
+    v = RLMCoerceToNil(v);
+    checkType(!v || [v respondsToSelector:@selector(timeIntervalSinceReferenceDate)], v, @"date");
+    return RLMTimestampForNSDate(v);
+}
+
+// Checking for NSNumber here rather than the selectors like the other ones
+// because NSString implements the same selectors and we don't want implicit
+// conversions from string
+template<>
+bool RLMAccessorContext::unbox(id v) {
+    checkType([v isKindOfClass:[NSNumber class]], v, @"bool");
+    return [v boolValue];
+}
+template<>
+double RLMAccessorContext::unbox(id v) {
+    checkType([v isKindOfClass:[NSNumber class]], v, @"double");
+    return [v doubleValue];
+}
+template<>
+float RLMAccessorContext::unbox(id v) {
+    checkType([v isKindOfClass:[NSNumber class]], v, @"float");
+    return [v floatValue];
+}
+template<>
+long long RLMAccessorContext::unbox(id v) {
+    checkType([v isKindOfClass:[NSNumber class]], v, @"int");
+    return [v longLongValue];
+}
+template<>
+BinaryData RLMAccessorContext::unbox(id v) {
+    v = RLMCoerceToNil(v);
+    checkType(!v || [v respondsToSelector:@selector(bytes)], v, @"data");
+    return RLMBinaryDataForNSData(v);
+}
+template<>
+StringData RLMAccessorContext::unbox(id v) {
+    v = RLMCoerceToNil(v);
+    checkType(!v || [v respondsToSelector:@selector(UTF8String)], v, @"string");
+    return RLMStringDataWithNSString(v);
+}
+
+template<typename Fn>
+static auto to_optional(id v, Fn&& fn) {
+    v = RLMCoerceToNil(v);
+    return v && v != NSNull.null ? realm::util::make_optional(fn(v)) : util::none;
+}
+
+template<>
+realm::util::Optional<bool> RLMAccessorContext::unbox(id v) {
+    return to_optional(v, [&](__unsafe_unretained id v) {
+        checkType([v respondsToSelector:@selector(boolValue)], v, @"bool?");
+        return (bool)[v boolValue];
+    });
+}
+template<>
+realm::util::Optional<double> RLMAccessorContext::unbox(id v) {
+    return to_optional(v, [&](__unsafe_unretained id v) {
+        checkType([v respondsToSelector:@selector(doubleValue)], v, @"double?");
+        return [v doubleValue];
+    });
+}
+template<>
+realm::util::Optional<float> RLMAccessorContext::unbox(id v) {
+    return to_optional(v, [&](__unsafe_unretained id v) {
+        checkType([v respondsToSelector:@selector(floatValue)], v, @"float?");
+        return [v floatValue];
+    });
+}
+template<>
+realm::util::Optional<int64_t> RLMAccessorContext::unbox(id v) {
+    return to_optional(v, [&](__unsafe_unretained id v) {
+        checkType([v respondsToSelector:@selector(longLongValue)], v, @"int?");
+        return [v longLongValue];
+    });
+}
+
 template<>
 RowExpr RLMAccessorContext::unbox(id v) {
-    auto& row = static_cast<RLMObjectBase *>(v)->_row;
-    return row.is_attached() ? row.get_table()->get(row.get_index()) : RowExpr();
+    // FIXME: a bunch of c/p code
+
+    RLMObjectBase *link = RLMDynamicCast<RLMObjectBase>(v);
+    if (!link) {
+        if (_create_mode == RLMCreateMode::None)
+            return RowExpr();
+        if (![link->_objectSchema.className isEqualToString:_info.rlmObjectSchema.className]) {
+            return to_expr(RLMCreateObjectInRealmWithValue(_realm, _info.rlmObjectSchema.className, link, false)->_row);
+        }
+    }
+
+    if (link.isInvalidated) {
+        @throw RLMException(@"Adding a deleted or invalidated object to a Realm is not permitted");
+    }
+
+    if (!link->_realm) {
+        if (_create_mode == RLMCreateMode::None)
+            return RowExpr();
+        RLMAddObjectToRealm(link, _realm, false);
+    }
+    else if (link->_realm != _realm) {
+        @throw RLMException(@"Can not add objects from a different Realm");
+    }
+    return to_expr(link->_row);
 }
 
 void RLMAccessorContext::will_change(realm::Row const& row, realm::Property const& prop) {
