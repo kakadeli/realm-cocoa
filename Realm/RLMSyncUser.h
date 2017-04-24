@@ -137,7 +137,10 @@ NS_SWIFT_UNAVAILABLE("Use the full version of this API.");
  */
 - (NSArray<RLMSyncSession *> *)allSessions;
 
-#pragma mark - Permissions
+// This set of permissions APIs uses immutable `RLMSyncPermissionValue` objects to
+// get and set permissions, using a simplified API. Either this API or the Realm
+// Object based API can be used to work with permissions.
+#pragma mark - Value-based Permissions API
 
 /**
  Asynchronously retrieve all permissions associated with the given user.
@@ -168,7 +171,11 @@ NS_SWIFT_UNAVAILABLE("Use the full version of this API.");
  */
 - (void)revokePermission:(RLMSyncPermissionValue *)permission callback:(RLMPermissionStatusBlock)callback;
 
-#pragma mark - Permissions (old)
+// This set of permissions APIs uses a set of Realms and Realm model objects
+// representing various permission states and actions, as well as standard
+// Realm affordances, to work with permissions. Either this API or the Realm
+// Object based API can be used to work with permissions.
+#pragma mark - Realm Object-based Permissions API
 
 /**
  Returns an instance of the Management Realm owned by the user.
