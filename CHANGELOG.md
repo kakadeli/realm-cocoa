@@ -9,6 +9,8 @@ x.x.x Release notes (yyyy-MM-dd)
 
 * Use reachability API to minimize the reconnection delay if the network
   connection was lost.
+* Add a new API for changing and retrieving permissions. This API can be used
+  alongside, or instead of, the existing Realm Object-based permissions system.
 
 ### Bugfixes
 
@@ -359,8 +361,6 @@ This release adds binary versions of Swift 3.0.2 frameworks built with Xcode 8.2
 ### Enhancements
 
 * Add support for 'LIKE' queries (wildcard matching).
-* Add a new API for changing and retrieving permissions. This API can be used
-  alongside, or instead of, the existing Realm Object-based permissions system.
 
 ### Bugfixes
 
