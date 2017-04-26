@@ -9,8 +9,9 @@ x.x.x Release notes (yyyy-MM-dd)
 
 * Use reachability API to minimize the reconnection delay if the network
   connection was lost.
-* Add a new API for changing and retrieving permissions. This API can be used
-  alongside, or instead of, the existing Realm Object-based permissions system.
+* Add a new API for changing and retrieving permissions for synchronized Realms.
+  This API is intended to replace the existing Realm Object-based permissions
+  system.
 
 ### Bugfixes
 
