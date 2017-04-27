@@ -35,7 +35,7 @@ typedef NS_ENUM(NSUInteger, RLMSyncUserState) {
 /// A block type used for APIs which asynchronously vend an `RLMSyncUser`.
 typedef void(^RLMUserCompletionBlock)(RLMSyncUser * _Nullable, NSError * _Nullable);
 
-/// A block type used to report the progress of a permissions set operation.
+/// A block type used to report the status of a permission apply or revoke operation.
 /// If the `NSError` argument is nil, the operation succeeded.
 typedef void(^RLMPermissionStatusBlock)(NSError * _Nullable);
 
@@ -138,17 +138,17 @@ NS_SWIFT_UNAVAILABLE("Use the full version of this API.");
 - (NSArray<RLMSyncSession *> *)allSessions;
 
 // This set of permissions APIs uses immutable `RLMSyncPermissionValue` objects to
-// get and set permissions. It is intended to replace the set of APIs which directly
-// access Realms and Realm model objects to work with permissions.
+// retrieve and apply permissions. It is intended to replace the set of APIs which
+// directly access Realms and Realm model objects to work with permissions.
 #pragma mark - Value-based Permissions API
 
 /**
  Asynchronously retrieve all permissions associated with the user calling this method.
 
- The results will be returned through the callback block, or an error if the operation fails.
+ The results will be returned through the callback block, or an error if the operation failed.
  The callback block will be run on the same thread the method was called on.
 
- @warning This method must be called upon a thread with a currently active run loop. Unless
+ @warning This method must be called from a thread with a currently active run loop. Unless
           you have manually configured a run loop on a side thread, this will usually be the
           main thread.
 
